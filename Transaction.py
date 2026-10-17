@@ -27,17 +27,17 @@ def check_amount(value: str | int | Decimal) -> Decimal:
 class Transaction:
     """거래 한 건의 데이터와 기본 입력 검증을 담당합니다."""
 
-    def __init__(self, type: str, money: str | int | Decimal, category: str,
-                 date: str, memo: str = "", tag: str | None = None,
+    def __init__(self, type: str, amount: str | int | Decimal, category: str,
+                 date: str, memo: str = "", tags: str | None = None,
                  id: str | None = None) -> None:
         if type not in ["income", "expense"]:
             raise ValueError("타입은 income(수입), expense(지출) 중 하나를 입력하세요.")
         self.type = type
-        self.money = str(int(check_amount(money)))
+        self.amount = str(int(check_amount(amount)))
         self.category = category
         self.date = check_date(date)
         self.memo = memo
-        self.tag = tag or ""
+        self.tags = tags or ""
         self.id = id or uuid4().hex[:12]
 
     def to_dict(self) -> dict[str, str]:

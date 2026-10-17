@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 FIELDS = {
-    "transactions": ["type", "money", "category", "date", "memo", "tag", "id"],
+    "transactions": ["type", "amount", "category", "date", "memo", "tags", "id"],
     "categories": ["name"],
     "budgets": ["날짜", "예산액"],
 }

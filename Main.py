@@ -61,8 +61,8 @@ def print_transactions(rows: Iterable[dict[str, str]]) -> None:
     found = False
     for row in rows:
         found = True
-        print(f"{row['id']} | {row['date']} | {row['type']} | {row['money']} | "
-              f"{row['category']} | {row['memo']} | {row['tag']}")
+        print(f"{row['id']} | {row['date']} | {row['type']} | {row['amount']} | "
+              f"{row['category']} | {row['memo']} | {row['tags']}")
     if not found:
         print("데이터 없음")
 
@@ -85,7 +85,8 @@ def main(argv: list[str] | None = None, control: TransactionControl | None = Non
         if args.type is None:
             args.type = input("타입(income/expense): ").strip()
         if args.category is None:
-            control.category("list")
+            for line in control.category("list"):
+                print(line)
             args.category = input("카테고리: ").strip()
         if args.amount is None:
             args.amount = input("금액(양수 정수): ").strip()
@@ -99,7 +100,7 @@ def main(argv: list[str] | None = None, control: TransactionControl | None = Non
     elif args.command == "update":
         changes = {}
         for option, field in [("date", "date"), ("type", "type"), ("category", "category"),
-                              ("amount", "money"), ("memo", "memo"), ("tags", "tag")]:
+                              ("amount", "amount"), ("memo", "memo"), ("tags", "tags")]:
             value = getattr(args, option)
             if value is not None:
                 changes[field] = value
@@ -116,7 +117,8 @@ def main(argv: list[str] | None = None, control: TransactionControl | None = Non
         print_transactions(control.search_transactions(args.start, args.end, args.category,
                                                       args.type, args.q, args.tag))
     elif args.command == "summary":
-        control.summarize_transactions(args.month, args.top)
+        for line in control.summarize_transactions(args.month, args.top):
+            print(line)
     elif args.command == "budget":
         control.budget.edit_budget(args.amount, args.month)
         print("예산 설정 완료")
@@ -124,7 +126,8 @@ def main(argv: list[str] | None = None, control: TransactionControl | None = Non
         name = getattr(args, "option_name", None) or getattr(args, "name", None)
         if args.action in ["add", "remove"] and name is None:
             name = input("카테고리명: ").strip()
-        control.category(args.action, name)
+        for line in control.category(args.action, name):
+            print(line)
     elif args.command == "import":
         count = control.import_transactions(args.source)
         print(f"가져오기 완료: imported={count}, skipped=0")

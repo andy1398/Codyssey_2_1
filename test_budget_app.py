@@ -95,7 +95,7 @@ class BudgetAppTests(unittest.TestCase):
     def test_update_delete_and_invalid_updates(self):
         identifier = self.add()
         self.assertEqual(self.call(["update", "--id", identifier, "--amount", "300", "--memo", ""])[0], 0)
-        self.assertEqual(next(self.control.show_transactions())["money"], "300")
+        self.assertEqual(next(self.control.show_transactions())["amount"], "300")
         before = self.control.path.read_bytes()
         for args in [["update", "--id", identifier, "--amount", "-1"],
                      ["update", "--id", "missing", "--amount", "5"],
@@ -149,7 +149,7 @@ class BudgetAppTests(unittest.TestCase):
     def test_import_optional_columns_and_bad_header(self):
         source = self.write_import([dict(date="2026-10-17", type="expense", category="food", amount="300")], CSV_FIELDS[:4])
         self.assertEqual(self.call(["import", "--from", source])[0], 0)
-        self.assertEqual(next(self.control.show_transactions())["tag"], "")
+        self.assertEqual(next(self.control.show_transactions())["tags"], "")
         Path(source).write_text("date,type,category,amount,amount\n", encoding="utf-8")
         self.assertEqual(self.call(["import", "--from", source])[0], 1)
 
@@ -198,6 +198,48 @@ class BudgetAppTests(unittest.TestCase):
             with self.subTest(command=command), self.assertRaises(SystemExit) as raised:
                 self.call(command + ["--help"])
             self.assertEqual(raised.exception.code, 0)
+
+    def test_stored_invalid_values_are_rejected_without_writing(self):
+        from Save_data import FIELDS
+        row = Transaction("expense", "100", "food", "2026-10-17").to_dict()
+        for field, value in [("type", "wrong"), ("amount", "-100"),
+                             ("date", "2026-02-30"), ("category", "missing"), ("id", "")]:
+            bad = row.copy()
+            bad[field] = value
+            save_data(self.control.path, [bad], FIELDS["transactions"])
+            before = self.control.path.read_bytes()
+            for command in [["list"], ["summary", "--month", "2026-10"],
+                            ["delete", "--id", row["id"]]]:
+                code, output = self.call(command)
+                self.assertEqual(code, 1)
+                self.assertNotIn("Traceback", output)
+                self.assertEqual(self.control.path.read_bytes(), before)
+
+    def test_legacy_file_read_and_safe_conversion(self):
+        old_fields = ["type", "money", "category", "date", "memo", "tag", "id"]
+        row = dict(type="expense", money="100", category="food",
+                   date="2026-10-17", memo="기존 메모", tag="meal", id="old-id")
+        save_data(self.control.path, [row], old_fields)
+        before = self.control.path.read_bytes()
+        loaded = next(self.control.show_transactions())
+        self.assertEqual(loaded["amount"], "100")
+        self.assertEqual(loaded["tags"], "meal")
+        self.assertEqual(self.control.path.read_bytes(), before)
+        self.assertEqual(self.call(["update", "--id", "old-id", "--amount", "200"])[0], 0)
+        with self.control.path.open(encoding="utf-8", newline="") as file:
+            reader = csv.DictReader(file)
+            self.assertIn("amount", reader.fieldnames)
+            self.assertNotIn("money", reader.fieldnames)
+            updated = next(reader)
+            self.assertEqual(updated["id"], "old-id")
+            self.assertEqual(updated["memo"], "기존 메모")
+            self.assertEqual(updated["amount"], "200")
+
+    def test_blank_search_dates_are_errors(self):
+        for option in ["--from", "--to"]:
+            code, output = self.call(["search", option, ""])
+            self.assertEqual(code, 1)
+            self.assertNotIn("Traceback", output)
 
     def test_actual_exit_codes_and_interactive_recovery(self):
         base = [sys.executable, str(Path(__file__).with_name("Main.py")), "--data-dir", str(self.control.path.parent)]

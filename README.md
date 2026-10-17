@@ -1,7 +1,7 @@
 # 용돈 기입장
 
 Python 3.10 이상의 표준 라이브러리만 사용하는 CSV 기반 콘솔 가계부입니다.
-기존 파일 구성, Transaction / TransactionControl / Budget 클래스와 내부 CSV 열 이름을 유지했습니다.
+기존 파일 구성, Transaction / TransactionControl / Budget 클래스를 유지했습니다. 거래 필드는 과제에 맞게 amount와 tags를 사용합니다.
 
 ## 실행 방법
 
@@ -67,14 +67,19 @@ python3 Main.py category remove salary
 
 | 파일 | 열 이름 |
 | --- | --- |
-| transactions.csv | type,money,category,date,memo,tag,id |
+| transactions.csv | type,amount,category,date,memo,tags,id |
 | categories.csv | name |
 | budgets.csv | 날짜,예산액 |
 
-기존 파일과 호환되도록 내부 열 이름은 유지합니다. import/export에서는 아래의 표준 스키마로 변환합니다.
+예전 money/tag 열 이름으로 저장된 거래 파일도 읽을 수 있습니다.
+다음 거래 저장이 성공하면 amount/tags 열 이름으로 교체합니다. 조회만으로 파일을 바꾸지 않습니다.
 기존 데이터에 소수 금액이 있다면 새 정수 검증 정책에 맞게 정리해야 합니다.
 
-조회·검색·월별 요약은 `load_data()`의 `yield`로 한 줄씩 처리합니다.
+조회·검색·월별 요약은 `load_data()`와 `load_transactions()`의 `yield`로 한 줄씩 처리합니다.
+읽은 거래의 날짜, 타입, 양수 정수 금액, 카테고리와 빈 ID를 확인합니다.
+잘못된 거래를 발견하면 오류를 출력하고 종료 코드 1을 반환합니다. 쓰기 중 발견하면 원본을 유지합니다.
+목록은 --limit까지 읽은 거래만 검증하므로 파일 전체 검사 기능은 아닙니다.
+빈 검색 날짜(`--from ""`, `--to ""`)도 오류로 처리합니다.
 최신순 조회를 위해 **추가·수정·삭제 시 전체 거래를 메모리에 읽고 정렬하여 저장**합니다.
 조회에는 전체 로드가 없지만, 쓰기 작업은 전체 거래 수에 비례하는 메모리가 필요합니다.
 
@@ -123,7 +128,7 @@ date,type,category,amount,memo,tags
 | --- | --- |
 | Main.py | 명령어 파싱, 대화형 입력, 명령 실행 및 결과 출력 |
 | Transaction.py | 거래 객체, 날짜·타입·금액 검증 |
-| Transaction_Control.py | 거래 CRUD, 검색·요약, 카테고리, import/export |
+| Transaction_Control.py | 거래 검증·CRUD, 검색·요약, 카테고리, import/export |
 | Budget.py | 월별 예산 저장·조회와 월 검증 |
 | Load_data.py | 제너레이터 기반 CSV 읽기 |
 | Save_data.py | 파일 초기화, 임시 파일 저장 및 교체 |
@@ -148,3 +153,5 @@ python3 -m unittest -v test_budget_app.py
 ```
 
 임시 폴더를 사용하므로 실제 `data` 폴더는 변경하지 않습니다.
+
+요약과 카테고리 메서드는 출력할 문자열 목록을 반환하고, Main.py가 for문과 print로 화면에 표시합니다.
