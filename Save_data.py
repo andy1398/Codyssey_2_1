@@ -1,5 +1,30 @@
-# 마지막 단계에서 구현: CSV 파일 저장
-# transactions.csv, categories.csv, budgets.csv로 나누어 저장합니다.
-# 기본 폴더는 ./data, --data-dir로 변경할 수 있도록 구현합니다.
-# 첫 실행 시 필요한 폴더와 파일을 생성합니다.
-# 카테고리가 비어 있으면 food, transport, rent, etc를 생성합니다.
+# CSV 파일 저장
+import csv
+from pathlib import Path
+
+FIELDS = {
+    "transactions": ["type", "money", "category", "date", "memo", "tag", "id"],
+    "categories": ["name"],
+    "budgets": ["날짜", "예산액"],
+}
+
+
+def save_data(path, rows, fields):
+    path = Path(path)
+    temporary = path.with_suffix(".tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    # 저장을 끝낸 뒤 교체하여 기존 파일을 보호합니다.
+    temporary.replace(path)
+
+
+def initialize(data_dir="data"):
+    folder = Path(data_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, fields in FIELDS.items():
+        path = folder / (name + ".csv")
+        if not path.exists() or path.stat().st_size == 0:
+            save_data(path, [], fields)
+    return folder

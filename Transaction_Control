@@ -1,48 +1,51 @@
-# 2단계: 메모리에서 거래, 검색, 요약, 카테고리를 관리합니다.
-# 파일 저장과 로드는 마지막 단계에서 연결합니다.
+# 거래는 저장할 때 최신 날짜순으로 정렬하고, 조회할 때 한 줄씩 읽습니다.
 from decimal import Decimal
+from Load_data import load_data
+from Save_data import save_data, initialize, FIELDS
 from Transaction import Transaction, check_date
 from Budget import Budget, check_month
 
 
 class TransactionControl:
-    def __init__(self):
-        self.transactions = []
-        self.categories = []
-        self.budget = Budget()
+    def __init__(self, data_dir="data"):
+        folder = initialize(data_dir)
+        self.path = folder / "transactions.csv"
+        self.category_path = folder / "categories.csv"
+        self.budget = Budget(folder)
 
-    def sort_transactions(self):
-        self.transactions.sort(key=lambda row: row["date"], reverse=True)
+    def save_transactions(self, rows):
+        rows.sort(key=lambda row: row["date"], reverse=True)
+        save_data(self.path, rows, FIELDS["transactions"])
 
     def check_category(self, name):
-        if name not in self.categories:
+        names = [row["name"] for row in load_data(self.category_path)]
+        if name not in names:
             raise ValueError("등록되지 않은 카테고리입니다. category add로 먼저 추가하세요.")
 
     def add_transaction(self, transaction):
         self.check_category(transaction.category)
-        rows = self.transactions.copy()
+        rows = list(load_data(self.path))
         rows.insert(0, transaction.to_dict())
-        self.transactions = rows
-        self.sort_transactions()
+        self.save_transactions(rows)
         return transaction.id
 
     def show_transactions(self, limit=10):
         if limit <= 0:
             raise ValueError("limit은 1 이상으로 입력하세요.")
-        for index, row in enumerate(self.transactions):
-            if index >= limit:
-                break
+        for index, row in enumerate(load_data(self.path)):
             yield row
+            if index + 1 >= limit:
+                break
 
     def delete_transaction(self, transaction_id):
-        rows = self.transactions.copy()
+        rows = list(load_data(self.path))
         remaining = [row for row in rows if row["id"] != transaction_id]
         if len(rows) == len(remaining):
             raise ValueError("거래 ID를 찾을 수 없습니다. list로 ID를 확인하세요.")
-        self.transactions = remaining
+        self.save_transactions(remaining)
 
     def update_transaction(self, transaction_id, changes):
-        rows = self.transactions.copy()
+        rows = list(load_data(self.path))
         for index, row in enumerate(rows):
             if row["id"] == transaction_id:
                 row = row.copy()
@@ -50,8 +53,7 @@ class TransactionControl:
                 transaction = Transaction(**row)
                 self.check_category(transaction.category)
                 rows[index] = transaction.to_dict()
-                self.transactions = rows
-                self.sort_transactions()
+                self.save_transactions(rows)
                 return
         raise ValueError("거래 ID를 찾을 수 없습니다. list로 ID를 확인하세요.")
 
@@ -62,7 +64,7 @@ class TransactionControl:
             check_date(end)
         if start and end and start > end:
             raise ValueError("시작 날짜는 종료 날짜보다 늦을 수 없습니다.")
-        for row in self.transactions:
+        for row in load_data(self.path):
             if start and row["date"] < start:
                 continue
             if end and row["date"] > end:
@@ -85,7 +87,7 @@ class TransactionControl:
         expense = Decimal("0")
         categories = {}
         count = 0
-        for row in self.transactions:
+        for row in load_data(self.path):
             if row["date"][:7] != date:
                 continue
             count += 1
@@ -108,25 +110,29 @@ class TransactionControl:
                 print("경고: 예산을 초과했습니다.")
 
     def category(self, action, name=None):
+        rows = list(load_data(self.category_path))
+        names = [row["name"] for row in rows]
         if action == "list":
-            if not self.categories:
+            if not names:
                 print("등록된 카테고리가 없습니다. category add로 추가하세요.")
-            for item in self.categories:
+            for item in names:
                 print(item)
             return
         if not name or not name.strip():
             raise ValueError("카테고리 이름을 입력하세요.")
         if action == "add":
-            if name in self.categories:
+            if name in names:
                 raise ValueError("이미 등록된 카테고리입니다.")
-            self.categories.append(name)
+            rows.append({"name": name})
         elif action == "remove":
             self.check_category(name)
-            if any(row["category"] == name for row in self.transactions):
-                raise ValueError("사용 중인 카테고리입니다. 거래를 수정하거나 삭제한 뒤 다시 시도하세요.")
-            self.categories.remove(name)
+            for transaction in load_data(self.path):
+                if transaction["category"] == name:
+                    raise ValueError("사용 중인 카테고리입니다. 거래를 수정하거나 삭제한 뒤 다시 시도하세요.")
+            rows = [row for row in rows if row["name"] != name]
         else:
             raise ValueError("카테고리 명령은 add, list, remove 중 하나를 입력하세요.")
+        save_data(self.category_path, rows, FIELDS["categories"])
 
 
 Transaction_Control = TransactionControl

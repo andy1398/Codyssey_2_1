@@ -1,5 +1,7 @@
 from datetime import datetime
 from Transaction import check_amount
+from Load_data import load_data
+from Save_data import save_data, initialize, FIELDS
 
 
 def check_month(month):
@@ -10,22 +12,24 @@ def check_month(month):
 
 
 class Budget:
-    def __init__(self):
-        self.budget = []
+    def __init__(self, data_dir="data"):
+        folder = initialize(data_dir)
+        self.path = folder / "budgets.csv"
 
     def edit_budget(self, new_budget_amount, date):
         check_month(date)
         amount = check_amount(new_budget_amount)
-        for row in self.budget:
+        rows = list(load_data(self.path))
+        for row in rows:
             if row["날짜"] == date:
-                row["예산액"] = amount
+                row["예산액"] = str(amount)
+                save_data(self.path, rows, FIELDS["budgets"])
                 return
-        self.budget.append({"예산액": amount, "날짜": date})
+        rows.append({"예산액": str(amount), "날짜": date})
+        save_data(self.path, rows, FIELDS["budgets"])
 
     def get_budget(self, date):
-        for row in self.budget:
+        for row in load_data(self.path):
             if row["날짜"] == date:
-                return row["예산액"]
+                return check_amount(row["예산액"])
         return None
-
-# 마지막 단계: 예산 데이터를 파일로 저장하고 불러옵니다.

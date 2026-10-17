@@ -1,3 +1,4 @@
+import csv
 import sys
 import shlex
 from decimal import InvalidOperation
@@ -8,7 +9,8 @@ from error import Parser, InputError, print_error
 
 def make_parser():
     parser = Parser(description="용돈 기입장")
-    commands = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--data-dir", "-data-dir", default="data")
+    commands = parser.add_subparsers(dest="command")
     for name in ["add", "update"]:
         command = commands.add_parser(name)
         if name == "update":
@@ -62,8 +64,12 @@ def print_transactions(rows):
 def main(argv=None, control=None):
     try:
         args = make_parser().parse_args(argv)
+        if args.command is None:
+            if control is not None:
+                raise ValueError("명령을 입력하세요. --help로 명령 목록을 확인하세요.")
+            return interactive(args.data_dir)
         if control is None:
-            control = TransactionControl()
+            control = TransactionControl(args.data_dir)
         if args.command == "add":
             transaction = Transaction(args.type, args.amount, args.category, args.date,
                                       args.memo or "", args.tags or "")
@@ -95,16 +101,16 @@ def main(argv=None, control=None):
         elif args.command == "category":
             control.category(args.action, getattr(args, "option_name", None) or getattr(args, "name", None))
         return 0
-    except (InputError, ValueError, OSError, KeyError, TypeError, InvalidOperation) as error:
+    except (InputError, ValueError, OSError, KeyError, TypeError, InvalidOperation, csv.Error) as error:
         print_error(error)
         return 1
 
 
-def interactive():
-    control = TransactionControl()
+def interactive(data_dir="data"):
+    control = TransactionControl(data_dir)
     print("[ 용돈 기입장 ]")
     print("명령어 안내: --help / 종료: exit")
-    print("현재 단계에서는 종료하면 데이터가 사라집니다.")
+    print(f"저장 폴더: {data_dir} (변경 사항은 자동 저장됩니다.)")
     while True:
         try:
             command = input("> ").strip()
@@ -121,7 +127,14 @@ def interactive():
             print_error(error)
             continue
         try:
-            main(arguments, control)
+            if any(value.split("=")[0] in ["--data-dir", "-data-dir"] for value in arguments):
+                raise ValueError("저장 폴더는 실행할 때 지정하세요: python3 Main.py --data-dir 폴더")
+            if not arguments:
+                continue
+            if main(arguments, control) != 0:
+                continue
+        except ValueError as error:
+            print_error(error)
         except SystemExit as error:
             # --help를 출력한 뒤에도 입력을 계속 받습니다.
             if error.code:
@@ -129,6 +142,4 @@ def interactive():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        sys.exit(interactive())
     sys.exit(main())
