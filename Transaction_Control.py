@@ -1,35 +1,42 @@
 # 거래는 저장할 때 최신 날짜순으로 정렬하고, 조회할 때 한 줄씩 읽습니다.
+import csv
+from collections.abc import Iterator
 from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
 from Load_data import load_data
-from Save_data import save_data, initialize, FIELDS
+from Save_data import save_data, initialize, FIELDS, CSV_FIELDS
 from Transaction import Transaction, check_date
 from Budget import Budget, check_month
 
 
 class TransactionControl:
-    def __init__(self, data_dir="data"):
+    def __init__(self, data_dir: str | Path = "data") -> None:
         folder = initialize(data_dir)
         self.path = folder / "transactions.csv"
         self.category_path = folder / "categories.csv"
         self.budget = Budget(folder)
 
-    def save_transactions(self, rows):
+    def save_transactions(self, rows: list[dict[str, str]]) -> None:
         rows.sort(key=lambda row: row["date"], reverse=True)
         save_data(self.path, rows, FIELDS["transactions"])
 
-    def check_category(self, name):
+    def check_category(self, name: str) -> None:
         names = [row["name"] for row in load_data(self.category_path)]
         if name not in names:
             raise ValueError("등록되지 않은 카테고리입니다. category add로 먼저 추가하세요.")
 
-    def add_transaction(self, transaction):
+    def add_transaction(self, transaction: Transaction) -> str:
         self.check_category(transaction.category)
         rows = list(load_data(self.path))
+        ids = {row["id"] for row in rows}
+        while transaction.id in ids:
+            transaction.id = uuid4().hex[:12]
         rows.insert(0, transaction.to_dict())
         self.save_transactions(rows)
         return transaction.id
 
-    def show_transactions(self, limit=10):
+    def show_transactions(self, limit: int = 10) -> Iterator[dict[str, str]]:
         if limit <= 0:
             raise ValueError("limit은 1 이상으로 입력하세요.")
         for index, row in enumerate(load_data(self.path)):
@@ -37,14 +44,14 @@ class TransactionControl:
             if index + 1 >= limit:
                 break
 
-    def delete_transaction(self, transaction_id):
+    def delete_transaction(self, transaction_id: str) -> None:
         rows = list(load_data(self.path))
         remaining = [row for row in rows if row["id"] != transaction_id]
         if len(rows) == len(remaining):
             raise ValueError("거래 ID를 찾을 수 없습니다. list로 ID를 확인하세요.")
         self.save_transactions(remaining)
 
-    def update_transaction(self, transaction_id, changes):
+    def update_transaction(self, transaction_id: str, changes: dict[str, str]) -> None:
         rows = list(load_data(self.path))
         for index, row in enumerate(rows):
             if row["id"] == transaction_id:
@@ -57,7 +64,10 @@ class TransactionControl:
                 return
         raise ValueError("거래 ID를 찾을 수 없습니다. list로 ID를 확인하세요.")
 
-    def search_transactions(self, start=None, end=None, category=None, type=None, q=None, tag=None):
+    def search_transactions(self, start: str | None = None, end: str | None = None,
+                            category: str | None = None, type: str | None = None,
+                            q: str | None = None, tag: str | None = None
+                            ) -> Iterator[dict[str, str]]:
         if start:
             check_date(start)
         if end:
@@ -79,7 +89,7 @@ class TransactionControl:
                 continue
             yield row
 
-    def summarize_transactions(self, date, top=5):
+    def summarize_transactions(self, date: str, top: int = 5) -> None:
         check_month(date)
         if top <= 0:
             raise ValueError("top은 1 이상으로 입력하세요.")
@@ -109,7 +119,7 @@ class TransactionControl:
             if expense > budget:
                 print("경고: 예산을 초과했습니다.")
 
-    def category(self, action, name=None):
+    def category(self, action: str, name: str | None = None) -> None:
         rows = list(load_data(self.category_path))
         names = [row["name"] for row in rows]
         if action == "list":
@@ -120,6 +130,7 @@ class TransactionControl:
             return
         if not name or not name.strip():
             raise ValueError("카테고리 이름을 입력하세요.")
+        name = name.strip()
         if action == "add":
             if name in names:
                 raise ValueError("이미 등록된 카테고리입니다.")
@@ -133,6 +144,66 @@ class TransactionControl:
         else:
             raise ValueError("카테고리 명령은 add, list, remove 중 하나를 입력하세요.")
         save_data(self.category_path, rows, FIELDS["categories"])
+        print(f"카테고리 {action} 완료: {name}")
+
+
+    def import_transactions(self, source: str) -> int:
+        """모든 행을 검증한 다음 한 번에 저장합니다. 오류가 있으면 반영하지 않습니다."""
+        rows = list(load_data(self.path))
+        ids = {row["id"] for row in rows}
+        imported = []
+        with Path(source).open(encoding="utf-8", newline="") as file:
+            reader = csv.DictReader(file, strict=True)
+            fields = reader.fieldnames or []
+            required = {"date", "type", "category", "amount"}
+            if (not required.issubset(fields) or len(fields) != len(set(fields))
+                    or not set(fields).issubset(CSV_FIELDS)):
+                raise ValueError("CSV 헤더를 확인하세요: date,type,category,amount,memo,tags")
+            for row in reader:
+                if None in row or None in row.values():
+                    raise ValueError(f"CSV {reader.line_num}번째 줄의 항목 수를 확인하세요.")
+                try:
+                    transaction = Transaction(row["type"], row["amount"], row["category"],
+                                              row["date"], row.get("memo", ""), row.get("tags", ""))
+                    self.check_category(transaction.category)
+                except ValueError as error:
+                    raise ValueError(f"CSV {reader.line_num}번째 줄: {error}") from None
+                while transaction.id in ids:
+                    transaction.id = uuid4().hex[:12]
+                ids.add(transaction.id)
+                imported.append(transaction.to_dict())
+        if imported:
+            # 같은 날짜에서는 CSV의 뒤쪽 행을 더 나중에 추가한 거래로 취급합니다.
+            self.save_transactions(list(reversed(imported)) + rows)
+        return len(imported)
+
+    def export_transactions(self, output: str, month: str | None = None,
+                            start: str | None = None, end: str | None = None) -> int:
+        if month is not None:
+            check_month(month)
+            if start is not None or end is not None:
+                raise ValueError("--month와 --from/--to는 함께 사용하지 마세요.")
+        elif start is None or end is None:
+            raise ValueError("--month 또는 --from과 --to를 모두 입력하세요.")
+        destination = Path(output)
+        for name in FIELDS:
+            stored = self.path.parent / (name + ".csv")
+            if destination.resolve() == stored.resolve():
+                raise ValueError("저장 중인 데이터 파일로 내보낼 수 없습니다. 다른 경로를 지정하세요.")
+        count = 0
+
+        def export_rows() -> Iterator[dict[str, str]]:
+            nonlocal count
+            for row in self.search_transactions(start, end):
+                if month is not None and row["date"][:7] != month:
+                    continue
+                count += 1
+                yield {"date": row["date"], "type": row["type"],
+                       "category": row["category"], "amount": row["money"],
+                       "memo": row["memo"], "tags": row["tag"]}
+
+        save_data(destination, export_rows(), CSV_FIELDS)
+        return count
 
 
 Transaction_Control = TransactionControl

@@ -1,10 +1,11 @@
 # CSV 파일을 한 줄씩 읽습니다.
 import csv
+from collections.abc import Iterator
 from pathlib import Path
 from Save_data import FIELDS
 
 
-def load_data(path):
+def load_data(path: str | Path) -> Iterator[dict[str, str]]:
     path = Path(path)
     with path.open(encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file, strict=True)
