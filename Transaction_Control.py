@@ -8,17 +8,14 @@ from Budget import Budget, check_month
 class TransactionControl:
     def __init__(self):
         self.transactions = []
-        self.categories = ["food", "transport", "rent", "etc"]
+        self.categories = []
         self.budget = Budget()
 
     def sort_transactions(self):
         self.transactions.sort(key=lambda row: row["date"], reverse=True)
 
-    def category_names(self):
-        return self.categories.copy()
-
     def check_category(self, name):
-        if name not in self.category_names():
+        if name not in self.categories:
             raise ValueError("등록되지 않은 카테고리입니다. category add로 먼저 추가하세요.")
 
     def add_transaction(self, transaction):
@@ -111,25 +108,25 @@ class TransactionControl:
                 print("경고: 예산을 초과했습니다.")
 
     def category(self, action, name=None):
-        names = self.category_names()
         if action == "list":
-            for item in names:
+            if not self.categories:
+                print("등록된 카테고리가 없습니다. category add로 추가하세요.")
+            for item in self.categories:
                 print(item)
             return
         if not name or not name.strip():
             raise ValueError("카테고리 이름을 입력하세요.")
         if action == "add":
-            if name in names:
+            if name in self.categories:
                 raise ValueError("이미 등록된 카테고리입니다.")
-            names.append(name)
+            self.categories.append(name)
         elif action == "remove":
             self.check_category(name)
             if any(row["category"] == name for row in self.transactions):
                 raise ValueError("사용 중인 카테고리입니다. 거래를 수정하거나 삭제한 뒤 다시 시도하세요.")
-            names.remove(name)
+            self.categories.remove(name)
         else:
             raise ValueError("카테고리 명령은 add, list, remove 중 하나를 입력하세요.")
-        self.categories = names
 
 
 Transaction_Control = TransactionControl

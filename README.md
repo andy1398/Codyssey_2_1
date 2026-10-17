@@ -15,6 +15,7 @@ python3 Main.py
 실행 후 아래 명령을 차례로 입력할 수 있습니다.
 
 ```text
+category add food
 category list
 add --date 2026-10-02 --type expense --category food --amount 8000 --memo "점심" --tags "식사,학교"
 list --limit 10
@@ -32,6 +33,7 @@ exit
 거래ID는 list에 표시된 실제 ID로 바꿉니다.
 타입은 income(수입), expense(지출)입니다.
 금액과 예산은 0보다 큰 숫자입니다.
+카테고리는 빈 목록에서 시작합니다. category add로 먼저 추가한 뒤 거래에 사용합니다.
 사용 중인 카테고리는 삭제할 수 없습니다.
 
 파이썬에서 불러오는 구현 파일은 Transaction_Control.py입니다.
